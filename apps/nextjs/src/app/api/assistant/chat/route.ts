@@ -89,6 +89,7 @@ import {
   withOpenRouterToolRequestOptions,
 } from "./assistant-openrouter";
 import { resolveHomarrProviderToken, toProviderOptionsKey } from "./assistant-provider-options";
+import { createAssistantIdentityFetchAsync, isAssistantIdentityHeader } from "./assistant-request-identity";
 import {
   appendActiveCustomWidgetToolInstruction,
   assistantExecutionPolicy,
@@ -1006,9 +1007,25 @@ export async function POST(request: Request) {
   };
 
   try {
-    const customHeaders = configuration.encryptedHeaders
+    const customHeaders: Record<string, string> = configuration.encryptedHeaders
       ? z.record(z.string(), z.string()).parse(JSON.parse(decryptSecret(configuration.encryptedHeaders)))
       : {};
+    if (configuration.provider === "custom") {
+      // Identity headers are reserved even when signing is disabled.
+      for (const name of Object.keys(customHeaders)) {
+        if (isAssistantIdentityHeader(name)) delete customHeaders[name];
+      }
+    }
+    const identityFetch =
+      configuration.provider === "custom"
+        ? await createAssistantIdentityFetchAsync({
+            userId: session.user.id,
+            baseUrl: configuration.baseUrl,
+            privateKey: appEnv.ASSISTANT_IDENTITY_PRIVATE_KEY,
+            issuer: appEnv.ASSISTANT_IDENTITY_ISSUER,
+            audience: appEnv.ASSISTANT_IDENTITY_AUDIENCE,
+          })
+        : undefined;
     const providerHeaders = {
       ...(configuration.provider === "openrouter" || openRouterServerToolsEnabled
         ? {
@@ -1031,6 +1048,7 @@ export async function POST(request: Request) {
       baseURL: configuration.baseUrl,
       apiKey: providerApiKey,
       headers: providerHeaders,
+      fetch: identityFetch,
       includeUsage: true,
       transformRequestBody:
         configuration.provider === "openrouter" || openRouterServerToolsEnabled

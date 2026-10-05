@@ -73,6 +73,29 @@ These variables configure the separate Workshop service, not the Homarr applicat
 
 See [Single Sign-On](/docs/advanced/single-sign-on) for more informations.
 
+## Assistant identity
+
+These server-only variables enable [signed Custom endpoint user assertions](/docs/management/assistant#custom-endpoint-user-identity).
+Leave all three unset to disable identity forwarding. If any is set, all three are required; incomplete configuration
+or an invalid key stops Custom endpoint chat requests instead of sending unsigned identity headers.
+
+| Environment Variable             | Description                                                                                                                     | Default |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `ASSISTANT_IDENTITY_PRIVATE_KEY` | Dedicated PKCS#8 PEM Ed25519 private key. In Docker, prefer `ASSISTANT_IDENTITY_PRIVATE_KEY_FILE` pointing to a mounted secret. | Unset   |
+| `ASSISTANT_IDENTITY_ISSUER`      | Stable, unique identifier for this Homarr instance, such as `homarr-prod`. The verifier must require this exact issuer.         | Unset   |
+| `ASSISTANT_IDENTITY_AUDIENCE`    | Identifier for the receiving endpoint, such as `my-assistant-endpoint`. The verifier must require this exact audience.          | Unset   |
+
+Generate a dedicated key pair:
+
+```sh
+umask 077
+openssl genpkey -algorithm ED25519 -out homarr-assistant-private.pem
+openssl pkey -in homarr-assistant-private.pem -pubout -out homarr-assistant-public.pem
+```
+
+Keep the private key on Homarr and install only the public key at the verifier. Set the issuer and audience to matching
+values on both sides, then restart Homarr. The ordinary Custom endpoint API key remains independent of this key pair.
+
 ## Security
 
 The `SECRET_ENCRYPTION_KEY` is required. If none is specified before starting the container, a random key will be shown in the error message and the container will exit.
