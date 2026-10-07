@@ -44,34 +44,25 @@ To identify Assistant users at a Custom endpoint, enable
 private key; give the endpoint only the corresponding public key through a trusted channel. The endpoint API key
 continues to authenticate access to the endpoint separately.
 
-When enabled, each chat completion request carries `X-Homarr-User-Assertion`, an EdDSA-signed JWT valid for 60 seconds,
-and `X-Homarr-User-Id`, the authenticated user's immutable Homarr database ID. Renaming a user does not change this ID.
-Homarr generates a fresh assertion for every outbound request, including retries and tool follow-ups. Assertions are
-not generated for model discovery or other provider presets. Both headers are reserved in Custom endpoint chat
-requests, regardless of casing; without signing configured, neither header is sent.
+When enabled, Custom endpoint chat requests carry `X-Homarr-User-Assertion`, an EdDSA-signed JWT valid for 60 seconds.
+Assertions are not generated for model discovery or other provider presets. This header is reserved regardless of
+casing; without signing configured, it is not sent.
 
-The JWT uses `typ: homarr-assistant-identity+jwt` and these claims:
+| Claim        | Meaning                                        |
+| ------------ | ---------------------------------------------- |
+| `iss`, `aud` | Configured Homarr issuer and endpoint audience |
+| `sub`        | Authenticated user's immutable Homarr ID       |
+| `iat`, `exp` | Issue time and expiry, in Unix seconds         |
 
-| Claim               | Meaning                                                           |
-| ------------------- | ----------------------------------------------------------------- |
-| `iss`, `aud`        | Configured Homarr issuer and endpoint audience                    |
-| `sub`               | Authenticated Homarr user ID                                      |
-| `iat`, `nbf`, `exp` | Issue time, earliest acceptance time, and expiry, in Unix seconds |
-| `jti`               | Unique ID for this outbound request                               |
-| `htm`, `htu`        | HTTP method (`POST`) and exact configured chat completion URL     |
-| `body_sha256`       | Base64url-encoded SHA-256 of the exact HTTP request body bytes    |
-
-The endpoint must verify the signature with the pinned public key, allow only `EdDSA`, and require the expected type,
-issuer, audience, subject, and time claims with a maximum lifetime of 60 seconds. It must also compare `htm`, `htu`,
-and `body_sha256` with the received request, require `X-Homarr-User-Id` to equal the verified `sub`, and atomically reject
-reused `(iss, jti)` values until expiry. Allow only a small clock tolerance, and retain replay entries for that tolerance
-as well. If a proxy rewrites the URL, compare `htu` against the trusted external endpoint URL configured in Homarr.
-Hash the body before parsing or rewriting it. Reject missing or invalid assertions instead of falling back to the
-unsigned user ID or endpoint bearer token. Signed requests do not follow redirects.
+The endpoint must verify the signature with the pinned Ed25519 public key, allow only `EdDSA`, require the expected
+issuer and audience, and require a nonempty `sub`. Validate `iat` and `exp`: reject future issue times, expired assertions,
+and lifetimes exceeding 60 seconds, allowing only a small clock tolerance. Reject missing or invalid assertions instead
+of treating the endpoint API key as user identity. The assertion can be reused until expiry; it does not bind the request
+body or provide replay protection.
 
 Use HTTPS for remote connections. Scope account mappings to the verified `(iss, sub)` pair; the endpoint remains
-responsible for pairing and per-user permissions. The private signing key must remain separate from the endpoint
-API key and must never be shared with other clients.
+responsible for pairing and per-user permissions. Renaming a Homarr user does not change their ID. Keep the private
+signing key separate from the endpoint API key and never share it with other clients.
 
 ## Access
 

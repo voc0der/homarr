@@ -77,7 +77,7 @@ See [Single Sign-On](/docs/advanced/single-sign-on) for more informations.
 
 These server-only variables enable [signed Custom endpoint user assertions](/docs/management/assistant#custom-endpoint-user-identity).
 Leave all three unset to disable identity forwarding. If any is set, all three are required; incomplete configuration
-or an invalid key stops Custom endpoint chat requests instead of sending unsigned identity headers.
+or an invalid key stops Custom endpoint chat requests instead of omitting the assertion.
 
 | Environment Variable             | Description                                                                                                                     | Default |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------- |
