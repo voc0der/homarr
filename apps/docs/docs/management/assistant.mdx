@@ -37,6 +37,33 @@ your preferred AI client with Homarr, connect it to the [Homarr MCP server](/doc
 
 </Alert>
 
+### Custom endpoint user identity
+
+To identify Assistant users at a Custom endpoint, enable
+[signed identity assertions](/docs/advanced/environment-variables#assistant-identity). Homarr keeps a dedicated Ed25519
+private key; give the endpoint only the corresponding public key through a trusted channel. The endpoint API key
+continues to authenticate access to the endpoint separately.
+
+When enabled, Custom endpoint chat requests carry `X-Homarr-User-Assertion`, an EdDSA-signed JWT valid for 60 seconds.
+Assertions are not generated for model discovery or other provider presets. This header is reserved regardless of
+casing; without signing configured, it is not sent.
+
+| Claim        | Meaning                                        |
+| ------------ | ---------------------------------------------- |
+| `iss`, `aud` | Configured Homarr issuer and endpoint audience |
+| `sub`        | Authenticated user's immutable Homarr ID       |
+| `iat`, `exp` | Issue time and expiry, in Unix seconds         |
+
+The endpoint must verify the signature with the pinned Ed25519 public key, allow only `EdDSA`, require the expected
+issuer and audience, and require a nonempty `sub`. Validate `iat` and `exp`: reject future issue times, expired assertions,
+and lifetimes exceeding 60 seconds, allowing only a small clock tolerance. Reject missing or invalid assertions instead
+of treating the endpoint API key as user identity. The assertion can be reused until expiry; it does not bind the request
+body or provide replay protection.
+
+Use HTTPS for remote connections. Scope account mappings to the verified `(iss, sub)` pair; the endpoint remains
+responsible for pairing and per-user permissions. Renaming a Homarr user does not change their ID. Keep the private
+signing key separate from the endpoint API key and never share it with other clients.
+
 ## Access
 
 Open Assistant from the user menu, with `Shift+A`, from search with `Cmd/Ctrl+/`, or through the

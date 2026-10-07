@@ -25,6 +25,9 @@ const publicHttpOrigin = (variableName: string) =>
 export const env = createEnv({
   server: {
     BASE_URL: publicHttpOrigin("BASE_URL").optional(),
+    ASSISTANT_IDENTITY_PRIVATE_KEY: z.string().trim().min(1).optional(),
+    ASSISTANT_IDENTITY_ISSUER: z.string().trim().min(1).max(512).optional(),
+    ASSISTANT_IDENTITY_AUDIENCE: z.string().trim().min(1).max(512).optional(),
     UNSAFE_ENABLE_MOCK_INTEGRATION: createBooleanSchema(false),
     DEMO_MODE: createBooleanSchema(false),
     DEMO_READ_ONLY: createBooleanSchema(true),

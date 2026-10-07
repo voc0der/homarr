@@ -46,7 +46,7 @@ env:
   SKIP_ENV_VALIDATION: true
   TURBO_TELEMETRY_DISABLED: 1
   REGISTRY: ghcr.io
-  PREVIEW_IMAGE: ghcr.io/homarr-labs/homarr-test
+  PREVIEW_IMAGE: ghcr.io/${{ github.repository }}-test
 
 jobs:
   database-validation:
@@ -427,12 +427,16 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
-            const packageName = "homarr-test";
-            const org = context.repo.owner;
+            const packageName = `${context.repo.repo}-test`;
+            const owner = context.repo.owner;
+            const isOrganization = context.payload.repository.owner.type === "Organization";
+            const ownerParameters = isOrganization ? { org: owner } : { username: owner };
             const tag = process.env.IMAGE_TAG;
             const versions = await github.paginate(
-              github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg,
-              { package_type: "container", package_name: packageName, org, per_page: 100 },
+              isOrganization
+                ? github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg
+                : github.rest.packages.getAllPackageVersionsForPackageOwnedByUser,
+              { package_type: "container", package_name: packageName, ...ownerParameters, per_page: 100 },
             );
             const target = versions.find((version) =>
               version.metadata?.container?.tags?.includes(tag),
@@ -449,10 +453,13 @@ jobs:
               );
               return;
             }
-            await github.rest.packages.deletePackageVersionForOrg({
+            const deleteVersion = isOrganization
+              ? github.rest.packages.deletePackageVersionForOrg
+              : github.rest.packages.deletePackageVersionForUser;
+            await deleteVersion({
               package_type: "container",
               package_name: packageName,
-              org,
+              ...ownerParameters,
               package_version_id: target.id,
             });
             core.info(`Deleted package version ${target.id} (${tag})`);

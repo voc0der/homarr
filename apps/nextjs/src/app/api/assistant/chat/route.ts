@@ -89,6 +89,7 @@ import {
   withOpenRouterToolRequestOptions,
 } from "./assistant-openrouter";
 import { resolveHomarrProviderToken, toProviderOptionsKey } from "./assistant-provider-options";
+import { assistantUserAssertionHeader, createAssistantUserAssertionAsync } from "./assistant-request-identity";
 import {
   appendActiveCustomWidgetToolInstruction,
   assistantExecutionPolicy,
@@ -1006,10 +1007,16 @@ export async function POST(request: Request) {
   };
 
   try {
-    const customHeaders = configuration.encryptedHeaders
+    const customHeaders: Record<string, string> = configuration.encryptedHeaders
       ? z.record(z.string(), z.string()).parse(JSON.parse(decryptSecret(configuration.encryptedHeaders)))
       : {};
-    const providerHeaders = {
+    if (configuration.provider === "custom") {
+      // The assertion header is reserved even when signing is disabled.
+      for (const name of Object.keys(customHeaders)) {
+        if (name.toLowerCase() === assistantUserAssertionHeader.toLowerCase()) delete customHeaders[name];
+      }
+    }
+    const providerHeaders: Record<string, string> = {
       ...(configuration.provider === "openrouter" || openRouterServerToolsEnabled
         ? {
             "HTTP-Referer": "https://homarr.dev",
@@ -1030,7 +1037,6 @@ export async function POST(request: Request) {
       name: providerName,
       baseURL: configuration.baseUrl,
       apiKey: providerApiKey,
-      headers: providerHeaders,
       includeUsage: true,
       transformRequestBody:
         configuration.provider === "openrouter" || openRouterServerToolsEnabled
@@ -1084,10 +1090,21 @@ export async function POST(request: Request) {
     if (customWidgetLegacyMigrationOnly) stepTimeoutMs = assistantExecutionPolicy.totalTimeoutMs;
     const result = streamText({
       model: provider(modelId),
+      headers: providerHeaders,
       instructions: baseInstructions,
       messages: initialModelMessages,
       tools: availableTools,
-      prepareStep: ({ messages, responseMessages, stepNumber, steps }) => {
+      prepareStep: async ({ messages, responseMessages, stepNumber, steps }) => {
+        if (configuration.provider === "custom") {
+          // Tool loops can outlast the assertion, so refresh it before each model step.
+          const assertion = await createAssistantUserAssertionAsync({
+            userId: session.user.id,
+            privateKey: appEnv.ASSISTANT_IDENTITY_PRIVATE_KEY,
+            issuer: appEnv.ASSISTANT_IDENTITY_ISSUER,
+            audience: appEnv.ASSISTANT_IDENTITY_AUDIENCE,
+          });
+          if (assertion !== undefined) providerHeaders[assistantUserAssertionHeader] = assertion;
+        }
         customWidgetToolStepGate.begin(stepNumber);
         // A rejected mutation ends this turn, including lifecycle-enforced saves.
         // A subsequent user message can explicitly request new work.
